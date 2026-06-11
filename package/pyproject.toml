@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kk-calculator"
+version = "1.0.0"
+description = "KodeKloud sample calculator library for the Azure Artifacts lab"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "KodeKloud" }]
+
+[tool.setuptools.packages.find]
+include = ["kkcalc*"]

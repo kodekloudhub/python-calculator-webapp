@@ -1,0 +1,47 @@
+# python-calc-docker-ci
+# Provisions the Azure Container Registry (infra/acr.bicep), then builds and pushes the
+# container image with `az acr build` (server-side build via ACR Tasks — no Docker daemon
+# or docker-registry service connection required; the AzureRM connection is enough).
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - python_calc.py
+      - src/*
+      - Dockerfile
+      - infra/acr.bicep
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location + subscriptionId (detected at startup)
+
+stages:
+- stage: BuildAndPush
+  displayName: Build and push container image
+  jobs:
+    - job: BuildAndPush
+      pool:
+        name: kk-devops-agent-pool
+      steps:
+      - task: AzureCLI@2
+        displayName: Provision ACR and build/push image (az acr build)
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            # Provision the registry and read its name from the Bicep output.
+            ACR_NAME=$(az deployment group create \
+              --resource-group "$(resourceGroup)" \
+              --template-file infra/acr.bicep \
+              --query "properties.outputs.acrName.value" -o tsv)
+            echo "Using ACR: $ACR_NAME"
+
+            # Build the image inside ACR (server-side) and push both tags.
+            az acr build \
+              --registry "$ACR_NAME" \
+              --image web:$(Build.BuildId) \
+              --image web:latest \
+              .

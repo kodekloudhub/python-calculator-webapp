@@ -1,0 +1,80 @@
+# bicep-deploy
+# Infrastructure-as-Code pipeline: lint and preview (what-if) the Bicep templates, then deploy
+# them, and finally deploy the application to the provisioned Web App.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/*
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location (detected at startup)
+
+stages:
+- stage: Validate
+  displayName: Lint and Preview (what-if)
+  jobs:
+  - job: Validate
+    pool:
+      name: kk-devops-agent-pool
+    steps:
+    - task: AzureCLI@2
+      displayName: Bicep lint (build) and what-if
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az bicep build --file infra/main.bicep
+          az deployment group what-if \
+            --resource-group "$(resourceGroup)" \
+            --template-file infra/main.bicep
+
+- stage: Deploy
+  displayName: Deploy Infrastructure and Application
+  dependsOn: Validate
+  condition: succeeded()
+  jobs:
+  - job: Deploy
+    pool:
+      name: kk-devops-agent-pool
+    steps:
+    - task: AzureCLI@2
+      displayName: Deploy Bicep templates
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          WEBAPP_NAME=$(az deployment group create \
+            --resource-group "$(resourceGroup)" \
+            --template-file infra/main.bicep \
+            --query "properties.outputs.webAppName.value" -o tsv)
+          echo "##vso[task.setvariable variable=WEBAPP_NAME]$WEBAPP_NAME"
+          echo "Provisioned web app: $WEBAPP_NAME"
+
+    - script: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/app
+        cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+        cd $(Build.ArtifactStagingDirectory)/app && zip -r ../Web.zip .
+      displayName: Package the application
+
+    - task: AzureRmWebAppDeployment@5
+      displayName: Deploy application to Web App
+      inputs:
+        ConnectionType: 'AzureRM'
+        azureSubscription: $(azureServiceConnection)
+        appType: 'webAppLinux'
+        WebAppName: '$(WEBAPP_NAME)'
+        packageForLinux: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        RuntimeStack: 'PYTHON|3.12'
+        StartupCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
+        DeploymentTypeLinux: 'zipDeploy'

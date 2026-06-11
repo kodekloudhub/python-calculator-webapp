@@ -1,0 +1,48 @@
+# publish-package
+# Builds the kk-calculator Python package (sdist + wheel) and publishes it to an
+# Azure Artifacts feed using the TwineAuthenticate task.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - package/*
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  # Project-scoped feed: '<project>/<feed>'. The feed 'kk-python-feed' is created in Exercise 1.
+  artifactFeed: 'kk-python-feed'
+
+pool:
+  name: kk-devops-agent-pool
+
+steps:
+- script: |
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip python3-venv
+  displayName: Install Python3, pip, venv
+
+- script: |
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install --upgrade pip build twine
+    cd package
+    python -m build
+    ls -l dist
+  displayName: Build the kk-calculator package (sdist + wheel)
+
+- task: TwineAuthenticate@1
+  displayName: Authenticate twine with the Azure Artifacts feed
+  inputs:
+    artifactFeed: $(artifactFeed)
+
+- script: |
+    source venv/bin/activate
+    twine upload -r $(artifactFeed) --config-file $(PYPIRC_PATH) package/dist/* --skip-existing
+  displayName: Publish the package to the feed

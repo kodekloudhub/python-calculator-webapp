@@ -1,0 +1,138 @@
+# python-functional-tests
+# Build & unit-test, deploy the app to an Azure Web App, then run Selenium functional (UI)
+# tests against the live deployment and publish the test results.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+      - functional-tests/*
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location (detected at startup)
+
+stages:
+- stage: Build
+  displayName: Build and Unit Test
+  jobs:
+  - job: Build
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip python3-venv zip
+      displayName: Install Python3, pip, zip, venv
+    - script: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pytest tests/test_calc.py
+      displayName: Restore dependencies and run unit tests
+    - script: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/app
+        cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+      displayName: Stage application files
+    - task: ArchiveFiles@2
+      displayName: Archive application as Web.zip
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        replaceExistingArchive: true
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Website artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        artifact: 'Website'
+        publishLocation: 'pipeline'
+
+- stage: DeployAndFunctionalTest
+  displayName: Deploy and Run Functional Tests
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: DeployAndTest
+    pool:
+      name: kk-devops-agent-pool
+    steps:
+    - download: current
+      artifact: Website
+
+    - task: AzureCLI@2
+      displayName: Provision Web App and capture URL
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          WEBAPP_NAME=$(az deployment group create \
+            --resource-group "$(resourceGroup)" \
+            --template-file "$(Build.SourcesDirectory)/infra/webapp.bicep" \
+            --query "properties.outputs.webAppName.value" -o tsv)
+          WEBAPP_HOST=$(az deployment group show \
+            --resource-group "$(resourceGroup)" \
+            --name webapp \
+            --query "properties.outputs.webAppHostName.value" -o tsv 2>/dev/null)
+          [ -z "$WEBAPP_HOST" ] && WEBAPP_HOST="${WEBAPP_NAME}.azurewebsites.net"
+          echo "##vso[task.setvariable variable=WEBAPP_NAME]$WEBAPP_NAME"
+          echo "##vso[task.setvariable variable=APP_URL]https://$WEBAPP_HOST"
+
+    - task: AzureRmWebAppDeployment@5
+      displayName: Deploy app to Web App
+      inputs:
+        ConnectionType: 'AzureRM'
+        azureSubscription: $(azureServiceConnection)
+        appType: 'webAppLinux'
+        WebAppName: '$(WEBAPP_NAME)'
+        packageForLinux: '$(Pipeline.Workspace)/Website/Web.zip'
+        RuntimeStack: 'PYTHON|3.12'
+        StartupCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
+        DeploymentTypeLinux: 'zipDeploy'
+
+    - script: |
+        echo "Waiting for the app to be ready at $(APP_URL) ..."
+        for i in $(seq 1 30); do
+          if curl -sf --max-time 10 "$(APP_URL)" | grep -q "Simple Calculator"; then
+            echo "App is up."; break
+          fi
+          echo "  not ready yet ($i)..."; sleep 10
+        done
+      displayName: Wait for the deployment to be reachable
+
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y chromium-browser chromium-chromedriver || sudo apt-get install -y chromium chromium-driver
+      displayName: Install headless Chromium and chromedriver
+
+    - script: |
+        python3 -m venv ftvenv
+        source ftvenv/bin/activate
+        pip install --upgrade pip
+        pip install -r functional-tests/requirements.txt
+      displayName: Install functional test dependencies
+
+    - script: |
+        source ftvenv/bin/activate
+        export APP_URL="$(APP_URL)"
+        pytest functional-tests/test_functional.py --junitxml=functional-results.xml
+      displayName: Run Selenium functional tests
+
+    - task: PublishTestResults@2
+      displayName: Publish functional test results
+      condition: always()
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'functional-results.xml'
+        testRunTitle: 'Functional Tests'

@@ -1,0 +1,147 @@
+# python-gated-cd
+# Build, then deploy to a 'staging' environment, then deploy to a 'production' environment that
+# is protected by release gates (manual approval + a "Query Azure Monitor alerts" gate).
+# The production deployment only proceeds once the gates pass.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location (detected at startup)
+
+stages:
+- stage: Build
+  displayName: Build Python Solution
+  jobs:
+  - job: Build
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip python3-venv zip
+      displayName: Install Python3, pip, zip, venv
+    - script: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pytest tests/test_calc.py
+      displayName: Restore dependencies and run tests
+    - script: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/app
+        cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+      displayName: Stage application files
+    - task: ArchiveFiles@2
+      displayName: Archive application as Web.zip
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        replaceExistingArchive: true
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Website artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        artifact: 'Website'
+        publishLocation: 'pipeline'
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Bicep artifact
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/infra/webapp.bicep'
+        artifact: 'Bicep'
+        publishLocation: 'pipeline'
+
+- stage: DeployStaging
+  displayName: Deploy to Staging
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - deployment: DeployStaging
+      environment: staging
+      pool:
+        name: kk-devops-agent-pool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: Website
+            - download: current
+              artifact: Bicep
+            - task: AzureCLI@2
+              displayName: Provision Web App (Bicep)
+              inputs:
+                azureSubscription: $(azureServiceConnection)
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  WEBAPP_NAME=$(az deployment group create \
+                    --resource-group "$(resourceGroup)" \
+                    --template-file "$(Pipeline.Workspace)/Bicep/webapp.bicep" \
+                    --query "properties.outputs.webAppName.value" -o tsv)
+                  echo "##vso[task.setvariable variable=WEBAPP_NAME]$WEBAPP_NAME"
+            - task: AzureRmWebAppDeployment@5
+              displayName: Deploy app to Web App
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: $(azureServiceConnection)
+                appType: 'webAppLinux'
+                WebAppName: '$(WEBAPP_NAME)'
+                packageForLinux: '$(Pipeline.Workspace)/Website/Web.zip'
+                RuntimeStack: 'PYTHON|3.12'
+                StartupCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
+                DeploymentTypeLinux: 'zipDeploy'
+
+- stage: DeployProduction
+  displayName: Deploy to Production (gated)
+  dependsOn: DeployStaging
+  condition: succeeded()
+  jobs:
+    - deployment: DeployProduction
+      environment: production    # <-- gates (approval + Azure Monitor alerts) are attached here
+      pool:
+        name: kk-devops-agent-pool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: Website
+            - download: current
+              artifact: Bicep
+            - task: AzureCLI@2
+              displayName: Provision Web App (Bicep)
+              inputs:
+                azureSubscription: $(azureServiceConnection)
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  WEBAPP_NAME=$(az deployment group create \
+                    --resource-group "$(resourceGroup)" \
+                    --template-file "$(Pipeline.Workspace)/Bicep/webapp.bicep" \
+                    --query "properties.outputs.webAppName.value" -o tsv)
+                  echo "##vso[task.setvariable variable=WEBAPP_NAME]$WEBAPP_NAME"
+            - task: AzureRmWebAppDeployment@5
+              displayName: Deploy app to Web App
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: $(azureServiceConnection)
+                appType: 'webAppLinux'
+                WebAppName: '$(WEBAPP_NAME)'
+                packageForLinux: '$(Pipeline.Workspace)/Website/Web.zip'
+                RuntimeStack: 'PYTHON|3.12'
+                StartupCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
+                DeploymentTypeLinux: 'zipDeploy'
