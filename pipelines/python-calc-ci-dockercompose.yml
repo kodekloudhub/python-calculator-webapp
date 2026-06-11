@@ -1,0 +1,67 @@
+# python-calc-ci-dockercompose
+# Provisions an Azure Container Registry (infra/acr.bicep) and builds + pushes the calculator
+# image to it with Docker Compose. Runs on the self-hosted agent (Docker is installed at startup).
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location + subscriptionId (detected at startup)
+  - name: tag
+    value: '$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: Build and push images to ACR
+  jobs:
+  - job: Build
+    pool:
+      name: kk-devops-agent-pool
+    steps:
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: Deploy ACR (Bicep)
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: '$(resourceGroup)'
+        location: '$(location)'
+        templateLocation: 'Linked artifact'
+        csmFile: 'infra/acr.bicep'
+        deploymentMode: 'Incremental'
+        deploymentOutputs: 'acrOutputs'
+
+    - task: Bash@3
+      displayName: Parse ACR login server from Bicep output
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo '$(acrOutputs)' > acr.json
+          value=$(python3 -c "import json; print(json.load(open('acr.json'))['acrLoginServer']['value'])")
+          echo "##vso[task.setvariable variable=acrLoginServer;]$value"
+          echo "ACR login server: $value"
+
+    - task: DockerCompose@1
+      displayName: Build services
+      inputs:
+        containerregistrytype: 'Azure Container Registry'
+        azureSubscription: $(azureServiceConnection)
+        azureContainerRegistry: '$(acrLoginServer)'
+        dockerComposeFile: 'docker-compose.yml'
+        action: 'Build services'
+        additionalImageTags: '$(tag)'
+        includeLatestTag: true
+
+    - task: DockerCompose@1
+      displayName: Push services
+      inputs:
+        containerregistrytype: 'Azure Container Registry'
+        azureSubscription: $(azureServiceConnection)
+        azureContainerRegistry: '$(acrLoginServer)'
+        dockerComposeFile: 'docker-compose.yml'
+        action: 'Push services'
+        additionalImageTags: '$(tag)'
+        includeLatestTag: true

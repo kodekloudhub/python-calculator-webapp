@@ -1,15 +1,6 @@
 services:
-  pythoncalcmvc:
-    image: ${DOCKER_REGISTRY-}pythoncalcmvc
+  web:
+    image: ${DOCKER_REGISTRY-}web
     build:
       context: .
       dockerfile: Dockerfile
-    depends_on:
-      - "sqlserver"
-  sqlserver:
-    image: mcr.microsoft.com/azure-sql-edge
-    ports:
-      - "1433:1433"
-    environment:
-      - SA_PASSWORD=@someThingComplicated1234
-      - ACCEPT_EULA=Y

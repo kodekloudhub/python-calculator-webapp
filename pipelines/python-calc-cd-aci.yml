@@ -1,0 +1,44 @@
+# python-calc-cd-aci
+# Deploys the container image to Azure Container Instances (ACI), authenticating to ACR with the
+# 'acr-secret' that is pulled from Azure Key Vault through the linked 'acr-keyvault-vg' variable group.
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location + subscriptionId (detected at startup)
+  - group: acr-keyvault-vg     # Key Vault-linked variable group; provides the 'acr-secret' secret
+
+stages:
+- stage: Deploy
+  displayName: Deploy container to Azure Container Instances
+  jobs:
+  - job: Deploy
+    pool:
+      name: kk-devops-agent-pool
+    steps:
+    - task: AzureCLI@2
+      displayName: Deploy to ACI using the Key Vault acr-secret
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          ACR_NAME=$(az acr list --resource-group "$(resourceGroup)" --query "[0].name" -o tsv)
+          ACR_SERVER=$(az acr show --name "$ACR_NAME" --query loginServer -o tsv)
+          echo "Deploying $ACR_SERVER/web:latest to Azure Container Instances..."
+          az container create \
+            --resource-group "$(resourceGroup)" \
+            --name pycalc-aci \
+            --image "$ACR_SERVER/web:latest" \
+            --registry-login-server "$ACR_SERVER" \
+            --registry-username "$ACR_NAME" \
+            --registry-password "$(acr-secret)" \
+            --ports 80 \
+            --os-type Linux \
+            --dns-name-label "pycalc-$(Build.BuildId)" \
+            --location "$(location)"
+          echo "App URL:"
+          az container show --resource-group "$(resourceGroup)" --name pycalc-aci --query "ipAddress.fqdn" -o tsv
