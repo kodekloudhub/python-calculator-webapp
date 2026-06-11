@@ -1,7 +1,9 @@
 # python-multi-stage
-# A multi-stage YAML pipeline (pipeline-as-code): a Build stage that tests and publishes
-# artifacts, and a Deploy stage that provisions a Linux Web App with Bicep and deploys the app.
-# The Deploy stage targets the 'approvals' environment so you can attach a manual approval check.
+# A multi-stage YAML pipeline (pipeline-as-code): a Build stage that tests the app and publishes
+# the Website + Bicep artifacts, and a Deploy stage that deploys the Website artifact to a
+# pre-created Azure Web App. The Deploy stage targets the 'approvals' environment so a manual
+# approval can be attached. (The Bicep artifact is published for reference but not deployed here;
+# the Web App is created as a lab prerequisite.)
 
 trigger:
   branches:
@@ -17,7 +19,7 @@ resources:
       trigger: none
 
 variables:
-  - group: lab-vars            # azureServiceConnection + resourceGroup + location (detected at startup)
+  - group: lab-vars            # azureServiceConnection + resourceGroup + location + subscriptionId (detected at startup)
 
 stages:
 - stage: Build
@@ -74,7 +76,7 @@ stages:
         publishLocation: 'pipeline'
 
 - stage: Deploy
-  displayName: Deploy to Azure Web App
+  displayName: Deploy to an Azure Web App
   dependsOn: Build
   condition: succeeded()
   jobs:
@@ -88,24 +90,19 @@ stages:
             steps:
             - download: current
               artifact: Website
-            - download: current
-              artifact: Bicep
 
             - task: AzureCLI@2
-              displayName: Provision Web App with Bicep
+              displayName: Find the target Web App
               inputs:
                 azureSubscription: $(azureServiceConnection)
                 scriptType: bash
                 scriptLocation: inlineScript
                 inlineScript: |
-                  WEBAPP_NAME=$(az deployment group create \
-                    --resource-group "$(resourceGroup)" \
-                    --template-file "$(Pipeline.Workspace)/Bicep/webapp.bicep" \
-                    --query "properties.outputs.webAppName.value" -o tsv)
+                  WEBAPP_NAME=$(az webapp list --resource-group "$(resourceGroup)" --query "[0].name" -o tsv)
                   echo "##vso[task.setvariable variable=WEBAPP_NAME]$WEBAPP_NAME"
-                  echo "Provisioned web app: $WEBAPP_NAME"
+                  echo "Target web app: $WEBAPP_NAME"
 
-            - task: AzureRmWebAppDeployment@5
+            - task: AzureRmWebAppDeployment@4
               displayName: Deploy application to Web App
               inputs:
                 ConnectionType: 'AzureRM'
