@@ -1,5 +1,4 @@
 // Provisions a Linux Azure App Service that hosts the Python (Flask) calculator app.
-// Deployed by the GitHub Actions CD workflow (.github/workflows/python-calc-cd.yml).
 
 @description('Globally-unique web app name. Defaults to a name derived from the resource group id.')
 param webAppName string = 'gha-pycalc-${uniqueString(resourceGroup().id)}'
