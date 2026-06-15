@@ -1,0 +1,54 @@
+# python-calc-ci
+# CI build for the release-gates lab: runs the tests and publishes Web.zip as the 'Website'
+# build artifact. The classic Release pipeline (DevTest -> Production) consumes this artifact.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+pool:
+  name: kk-devops-agent-pool
+
+steps:
+- script: |
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip python3-venv zip
+  displayName: Install Python3, pip, zip, venv
+
+- script: |
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install --upgrade pip
+    if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    pytest tests/test_calc.py
+  displayName: Restore dependencies and run tests
+
+- script: |
+    mkdir -p $(Build.ArtifactStagingDirectory)/app
+    cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+  displayName: Stage application files
+
+- task: ArchiveFiles@2
+  displayName: Archive application as Web.zip
+  inputs:
+    rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/Web.zip'
+    replaceExistingArchive: true
+
+- task: PublishBuildArtifacts@1
+  displayName: Publish Website artifact
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'Website'
+    publishLocation: 'Container'
