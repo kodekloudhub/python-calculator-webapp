@@ -32,7 +32,8 @@ def _init_app_configuration():
         _config = load(
             connection_string=conn,
             feature_flag_enabled=True,
-            refresh_on=[WatchKey("sentinel")],     # change 'sentinel' in App Config to push updates
+            feature_flag_refresh_enabled=True,     # refresh feature flags at runtime, not just at startup
+            refresh_on=[WatchKey("sentinel")],     # change 'sentinel' in App Config to push config updates
             refresh_interval=10,
         )
         _feature_manager = FeatureManager(_config)
@@ -53,6 +54,7 @@ def get_banner():
 def sales_weekend_enabled():
     if _feature_manager is not None:
         try:
+            _config.refresh()   # pick up feature-flag changes at runtime (no-op within refresh_interval)
             return bool(_feature_manager.is_enabled("SalesWeekend"))
         except Exception:  # pragma: no cover
             pass
