@@ -1,8 +1,7 @@
 """
-Simple Calculator web app with optional Azure App Configuration (Managed Identity).
+Simple Calculator web app with optional Azure App Configuration.
 
-When UseAppConfig=true and AppConfigEndpoint point at an App Configuration store, the app
-connects to it using its managed identity (DefaultAzureCredential) and reads:
+When AZURE_APPCONFIG_CONNECTION_STRING points at an App Configuration store, the app reads:
   - Dynamic configuration: 'Calculator:Settings:Banner' -- a banner message shown above the
     calculator, refreshed at runtime (watched 'sentinel' key) without redeploying.
   - Feature flag: 'SalesWeekend' -- when enabled, shows a promotional banner; when disabled it
@@ -16,26 +15,22 @@ from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# ── Azure App Configuration (optional, via managed identity) ───────────────────
+# ── Azure App Configuration (optional) ─────────────────────────────────────────
 _config = None
 _feature_manager = None
 
 def _init_app_configuration():
     """Load dynamic configuration and feature flags from Azure App Configuration."""
     global _config, _feature_manager
-    if os.environ.get("UseAppConfig", "").lower() != "true":
-        return
-    endpoint = os.environ.get("AppConfigEndpoint")
-    if not endpoint:
+    conn = os.environ.get("AZURE_APPCONFIG_CONNECTION_STRING")
+    if not conn:
         return
     try:
         from azure.appconfiguration.provider import load, WatchKey
-        from azure.identity import DefaultAzureCredential
         from featuremanagement import FeatureManager
 
         _config = load(
-            endpoint=endpoint,
-            credential=DefaultAzureCredential(),   # the Web App's managed identity
+            connection_string=conn,
             feature_flag_enabled=True,
             refresh_on=[WatchKey("sentinel")],     # change 'sentinel' in App Config to push updates
             refresh_interval=10,

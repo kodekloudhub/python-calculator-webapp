@@ -6,7 +6,7 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 ## Application
 | Path | Purpose |
 |---|---|
-| `python_calc.py` | Flask web calculator (reads optional Azure App Configuration via managed identity for a dynamic banner + the `SalesWeekend` feature flag; falls back to safe defaults) |
+| `python_calc.py` | Flask web calculator (reads optional Azure App Configuration via `AZURE_APPCONFIG_CONNECTION_STRING` for a dynamic banner + the `SalesWeekend` feature flag; falls back to safe defaults) |
 | `src/calc.py` | Calculator library (`safe_divide`, `add`, `subtract`, `multiply`) |
 | `tests/test_calc.py` | Unit tests (pytest) |
 | `requirements.txt` | Python dependencies |
@@ -16,7 +16,7 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 | File | Purpose |
 |---|---|
 | `webapp.bicep` | Linux Python Web App |
-| `webapp-appconfig.bicep` | Web App with a system-assigned managed identity (dynamic config / feature flags lab) |
+| `webapp-appconfig.bicep` | Linux Python Web App for the dynamic config / feature flags lab (connection string set post-deploy) |
 | `acr.bicep` | Azure Container Registry |
 | `webapp-docker.bicep` | Linux Web App for Containers |
 | `webapp-to-acr-roleassignment.bicep` | Grants the Web App's managed identity `AcrPull` |
@@ -30,7 +30,7 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 | `python-calc-ci.yml` | Release Gates + Dynamic Configuration labs (CI: build + publish the `Website` artifact) |
 | `python-functional-tests.yml` | Set up and run functional tests |
 | `python-calc-ci-dockercompose.yml` / `python-calc-cd-aci.yml` | Integrate Azure Key Vault (Docker Compose CI / ACI CD) |
-| `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags (CD: deploy Web App with a managed identity, triggered by `python-calc-ci`) |
+| `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags (CD: deploy the Web App, triggered by `python-calc-ci`) |
 | `bicep-deploy.yml` | Deployments using Azure Bicep templates |
 | `publish-package.yml` | Package Management with Azure Artifacts |
 

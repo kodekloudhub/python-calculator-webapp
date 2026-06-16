@@ -1,8 +1,7 @@
 // Linux Python Web App for the dynamic-configuration / feature-flags lab.
-// The Web App is created with a system-assigned managed identity. After deployment the lab grants
-// that identity the 'App Configuration Data Reader' role and sets the UseAppConfig / AppConfigEndpoint
-// app settings, so the app reads dynamic configuration and feature flags from Azure App Configuration
-// without any connection string.
+// After deployment the lab creates an Azure App Configuration store and sets the
+// AZURE_APPCONFIG_CONNECTION_STRING app setting on this Web App, so the app reads dynamic
+// configuration and feature flags from the store at runtime.
 
 @description('Globally-unique web app name.')
 param webAppName string = 'ff-pycalc-${uniqueString(resourceGroup().id)}'
@@ -31,9 +30,6 @@ resource appService 'Microsoft.Web/sites@2022-09-01' = {
   name: webAppName
   kind: 'app,linux'
   location: location
-  identity: {
-    type: 'SystemAssigned'
-  }
   properties: {
     serverFarmId: appServicePlan.id
     siteConfig: {
@@ -55,4 +51,3 @@ resource appService 'Microsoft.Web/sites@2022-09-01' = {
 
 output webAppName string = appService.name
 output webAppHostName string = appService.properties.defaultHostName
-output principalId string = appService.identity.principalId
