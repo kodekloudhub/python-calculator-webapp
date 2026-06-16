@@ -27,10 +27,10 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 |---|---|
 | `python-calc-docker-ci.yml` / `python-calc-docker-cd.yml` | Deploy Docker containers to Azure App Service |
 | `python-multi-stage.yml` | Configure Pipelines as Code with YAML |
-| `python-calc-ci.yml` | Control Deployments using Release Gates (build + publish Website artifact) |
+| `python-calc-ci.yml` | Release Gates + Dynamic Configuration labs (CI: build + publish the `Website` artifact) |
 | `python-functional-tests.yml` | Set up and run functional tests |
 | `python-calc-ci-dockercompose.yml` / `python-calc-cd-aci.yml` | Integrate Azure Key Vault (Docker Compose CI / ACI CD) |
-| `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags |
+| `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags (CD: deploy Web App with a managed identity, triggered by `python-calc-ci`) |
 | `bicep-deploy.yml` | Deployments using Azure Bicep templates |
 | `publish-package.yml` | Package Management with Azure Artifacts |
 
