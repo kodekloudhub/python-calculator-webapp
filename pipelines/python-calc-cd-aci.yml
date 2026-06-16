@@ -38,6 +38,7 @@ stages:
             --registry-password "$(acr-secret)" \
             --ports 80 \
             --os-type Linux \
+            --sku Standard \
             --dns-name-label "pycalc-$(Build.BuildId)" \
             --location "$(location)"
           echo "App URL:"
