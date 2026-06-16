@@ -4,4 +4,5 @@ pytest
 pytest-cov
 pytest-azurepipelines
 azure-appconfiguration-provider>=1.1.0
+azure-identity>=1.15.0
 featuremanagement>=1.0.0

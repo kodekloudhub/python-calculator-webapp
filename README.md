@@ -6,7 +6,7 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 ## Application
 | Path | Purpose |
 |---|---|
-| `python_calc.py` | Flask web calculator (reads optional Azure App Configuration for dynamic title + the `AdvancedOperations` feature flag; falls back to safe defaults) |
+| `python_calc.py` | Flask web calculator (reads optional Azure App Configuration via managed identity for a dynamic banner + the `SalesWeekend` feature flag; falls back to safe defaults) |
 | `src/calc.py` | Calculator library (`safe_divide`, `add`, `subtract`, `multiply`) |
 | `tests/test_calc.py` | Unit tests (pytest) |
 | `requirements.txt` | Python dependencies |
@@ -16,11 +16,10 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 | File | Purpose |
 |---|---|
 | `webapp.bicep` | Linux Python Web App |
-| `webapp-appconfig.bicep` | Web App + `AZURE_APPCONFIG_CONNECTION_STRING` app setting (dynamic config / feature flags lab) |
+| `webapp-appconfig.bicep` | Web App with a system-assigned managed identity (dynamic config / feature flags lab) |
 | `acr.bicep` | Azure Container Registry |
 | `webapp-docker.bicep` | Linux Web App for Containers |
 | `webapp-to-acr-roleassignment.bicep` | Grants the Web App's managed identity `AcrPull` |
-| `appinsights.bicep` | Application Insights + Log Analytics (release-gates lab) |
 | `main.bicep` + `modules/` | Modular Bicep (storage + web app) for the Bicep deployments lab |
 
 ## Pipelines (`pipelines/`)
@@ -28,9 +27,10 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 |---|---|
 | `python-calc-docker-ci.yml` / `python-calc-docker-cd.yml` | Deploy Docker containers to Azure App Service |
 | `python-multi-stage.yml` | Configure Pipelines as Code with YAML |
-| `python-gated-cd.yml` | Control Deployments using Release Gates |
+| `python-calc-ci.yml` | Control Deployments using Release Gates (build + publish Website artifact) |
 | `python-functional-tests.yml` | Set up and run functional tests |
-| `python-keyvault-ci.yml` | Integrate Azure Key Vault |
+| `python-calc-ci-dockercompose.yml` / `python-calc-cd-aci.yml` | Integrate Azure Key Vault (Docker Compose CI / ACI CD) |
+| `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags |
 | `bicep-deploy.yml` | Deployments using Azure Bicep templates |
 | `publish-package.yml` | Package Management with Azure Artifacts |
 

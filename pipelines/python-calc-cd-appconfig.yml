@@ -1,0 +1,103 @@
+# python-calc-cd-appconfig
+# Builds the calculator and deploys it to a Linux Python Web App (created with a system-assigned
+# managed identity) using infra/webapp-appconfig.bicep. After this pipeline succeeds, the lab
+# creates an Azure App Configuration store, grants the Web App's managed identity the
+# 'App Configuration Data Reader' role, and sets the UseAppConfig / AppConfigEndpoint app settings
+# so dynamic configuration and feature flags take effect at runtime -- no redeploy needed.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+      - python_calc.py
+
+variables:
+  - group: lab-vars
+
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip python3-venv zip
+      displayName: Install Python3, pip, zip, venv
+    - script: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      displayName: Restore Python dependencies
+    - script: |
+        source venv/bin/activate
+        pytest tests/test_calc.py
+      displayName: Run tests
+    - script: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/app
+        cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+      displayName: Copy application files to staging
+    - task: ArchiveFiles@2
+      displayName: Archive application as Web.zip
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        replaceExistingArchive: true
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Website artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        artifact: 'Website'
+        publishLocation: 'pipeline'
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Bicep artifact
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/infra/webapp-appconfig.bicep'
+        artifact: 'Bicep'
+        publishLocation: 'pipeline'
+
+- stage: Deploy
+  displayName: Deploy Web App
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - download: current
+      artifact: Website
+    - download: current
+      artifact: Bicep
+    - task: AzureCLI@2
+      name: provision
+      displayName: Provision Web App (Bicep)
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          WEBAPP=$(az deployment group create \
+            --resource-group "$(resourceGroup)" \
+            --template-file "$(Pipeline.Workspace)/Bicep/webapp-appconfig.bicep" \
+            --parameters location="$(location)" \
+            --query properties.outputs.webAppName.value -o tsv)
+          echo "Deployed web app: $WEBAPP"
+          echo "##vso[task.setvariable variable=webAppName;isOutput=true]$WEBAPP"
+    - task: AzureWebApp@1
+      displayName: Deploy app to Web App
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        appType: webAppLinux
+        appName: '$(provision.webAppName)'
+        package: '$(Pipeline.Workspace)/Website/Web.zip'
+        startUpCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
