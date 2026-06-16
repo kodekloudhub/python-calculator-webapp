@@ -1,54 +1,42 @@
 """
-Selenium-based functional (UI) tests for the deployed Simple Calculator web app.
+Functional tests for the Simple Calculator web app.
 
-The target URL is read from the APP_URL environment variable (set by the pipeline to the
-deployed Azure Web App). These tests drive a real browser (headless Chromium) against the
-running application, verifying end-to-end behavior rather than individual functions.
+Unlike the unit tests (tests/test_calc.py) which test the safe_divide function in isolation,
+these functional tests exercise the Flask application end-to-end using Flask's built-in
+**test client** -- driving real HTTP requests against the app in-process (no browser, no
+deployment). They run in the CI pipeline and their results appear in the pipeline's Tests tab.
 """
-import os
 import pytest
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
-
-APP_URL = os.environ.get("APP_URL", "http://localhost:80")
+from python_calc import app
 
 
 @pytest.fixture
-def driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    drv = webdriver.Chrome(options=options)
-    drv.implicitly_wait(10)
-    yield drv
-    drv.quit()
+def client():
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        yield c
 
 
-def _calculate(driver, a, op, b):
-    driver.get(APP_URL)
-    driver.find_element(By.NAME, "a").send_keys(str(a))
-    driver.find_element(By.NAME, "b").send_keys(str(b))
-    Select(driver.find_element(By.NAME, "op")).select_by_value(op)
-    driver.find_element(By.CSS_SELECTOR, "button[type=submit]").click()
-    return driver.page_source
+def test_homepage_loads(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Simple Calculator" in resp.data
 
 
-def test_homepage_loads(driver):
-    driver.get(APP_URL)
-    assert "Simple Calculator" in driver.page_source
+def test_addition(client):
+    resp = client.post("/", data={"a": "4", "b": "5", "op": "+"})
+    assert resp.status_code == 200
+    assert b"Result" in resp.data
+    assert b"9" in resp.data
 
 
-def test_addition(driver):
-    page = _calculate(driver, 4, "+", 5)
-    assert "Result" in page
-    assert "9" in page
+def test_subtraction(client):
+    resp = client.post("/", data={"a": "10", "b": "3", "op": "-"})
+    assert b"Result" in resp.data
+    assert b"7" in resp.data
 
 
-def test_division_by_zero_shows_error(driver):
-    page = _calculate(driver, 10, "/", 0)
-    assert "Error" in page
-    assert "Division by zero is not allowed" in page
+def test_division_by_zero_shows_error(client):
+    resp = client.post("/", data={"a": "10", "b": "0", "op": "/"})
+    assert b"Error" in resp.data
+    assert b"Division by zero is not allowed" in resp.data
