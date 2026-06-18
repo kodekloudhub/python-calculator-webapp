@@ -1,5 +1,5 @@
 # publish-package
-# Builds the kk-calculator Python package (sdist + wheel) and publishes it to an
+# Builds the kk-calculator Python package (sdist + wheel) and publishes it to a project-scoped
 # Azure Artifacts feed using the TwineAuthenticate task.
 
 trigger:
@@ -16,8 +16,8 @@ resources:
       trigger: none
 
 variables:
-  # Project-scoped feed: '<project>/<feed>'. The feed 'kk-python-feed' is created in Exercise 1.
-  artifactFeed: 'kk-python-feed'
+  # Name of the project-scoped feed created in Exercise 1.
+  feedName: 'kk-python-feed'
 
 pool:
   name: kk-devops-agent-pool
@@ -40,9 +40,11 @@ steps:
 - task: TwineAuthenticate@1
   displayName: Authenticate twine with the Azure Artifacts feed
   inputs:
-    artifactFeed: $(artifactFeed)
+    # Project-scoped feed must be referenced as '<project>/<feed>'. $(System.TeamProject)
+    # resolves to this session's project name automatically.
+    artifactFeed: '$(System.TeamProject)/$(feedName)'
 
 - script: |
     source venv/bin/activate
-    twine upload -r $(artifactFeed) --config-file $(PYPIRC_PATH) package/dist/* --skip-existing
+    twine upload -r $(feedName) --config-file $(PYPIRC_PATH) package/dist/*
   displayName: Publish the package to the feed
