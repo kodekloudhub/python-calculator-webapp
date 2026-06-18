@@ -20,7 +20,7 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 | `acr.bicep` | Azure Container Registry |
 | `webapp-docker.bicep` | Linux Web App for Containers |
 | `webapp-to-acr-roleassignment.bicep` | Grants the Web App's managed identity `AcrPull` |
-| `main.bicep` + `modules/` | Modular Bicep (storage + web app) for the Bicep deployments lab |
+| `main.bicep` + `modules/webapp.bicep` | Bicep deployments lab — `main.bicep` uses the web app module and has the storage account inline; the lab walks you through extracting `modules/storage.bicep` |
 
 ## Pipelines (`pipelines/`)
 | File | Lab |
