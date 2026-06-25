@@ -1,0 +1,14 @@
+# Azure Load Testing configuration consumed by `az load test create` (and the loadtest-pipeline).
+# The 'domain' is substituted with the deployed web app host (no scheme) before the test is created.
+version: v0.1
+testId: calculator-ci-test
+displayName: Calculator CI Load Test
+testPlan: calculator.jmx
+description: Load test the Simple Calculator home page from CI/CD
+engineInstances: 1
+env:
+  - name: domain
+    value: REPLACE_WITH_WEBAPP_HOST
+failureCriteria:
+  - avg(response_time_ms) > 2000
+  - percentage(error) > 5

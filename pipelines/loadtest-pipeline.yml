@@ -1,0 +1,58 @@
+# loadtest-pipeline
+# Runs the JMeter load test against the deployed calculator Web App from CI/CD using Azure Load
+# Testing, and fails the build if the run breaches the failure criteria in loadtest/loadtest.yaml.
+#
+# Auth: the AzureCLI task uses the ARM service connection. No extra role grant is needed -- an
+# identity with Contributor/Owner at the subscription level automatically has Load Test Owner
+# data-plane access on load testing resources.
+
+trigger: none
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+variables:
+  - group: lab-vars            # resourceGroup, location, azureServiceConnection (published at startup)
+
+pool:
+  name: kk-devops-agent-pool
+
+steps:
+- task: AzureCLI@2
+  displayName: Run the load test with Azure Load Testing
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -e
+      az extension add --name load --only-show-errors
+
+      RG="$(resourceGroup)"
+      ALT=$(az load list --resource-group "$RG" --query "[0].name" -o tsv)
+      WEBAPP=$(az webapp list --resource-group "$RG" --query "[0].name" -o tsv)
+      HOST=$(az webapp show --resource-group "$RG" --name "$WEBAPP" --query defaultHostName -o tsv)
+      echo "Load Testing resource: $ALT | target host: $HOST"
+
+      cd loadtest
+      sed -i "s/REPLACE_WITH_WEBAPP_HOST/$HOST/" loadtest.yaml
+
+      RUN_ID="ci-run-$(Build.BuildId)"
+      az load test create \
+        --load-test-resource "$ALT" --resource-group "$RG" \
+        --test-id calculator-ci-test \
+        --load-test-config-file loadtest.yaml
+      az load test-run create \
+        --load-test-resource "$ALT" --resource-group "$RG" \
+        --test-id calculator-ci-test --test-run-id "$RUN_ID"
+
+      STATUS=$(az load test-run show \
+        --load-test-resource "$ALT" --resource-group "$RG" \
+        --test-run-id "$RUN_ID" --query "testResult" -o tsv)
+      echo "Load test result: $STATUS"
+      if [ "$STATUS" != "PASSED" ]; then
+        echo "##vso[task.logissue type=error]Load test breached the failure criteria (result: $STATUS)"
+        exit 1
+      fi

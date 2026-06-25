@@ -33,9 +33,11 @@ Import this repository into Azure Repos (or use it directly) — each lab uses t
 | `python-calc-cd-appconfig.yml` | Enable Dynamic Configuration and Feature Flags (CD: deploy the Web App, triggered by `python-calc-ci`) |
 | `bicep-deploy.yml` | Deployments using Azure Bicep templates |
 | `publish-package.yml` | Package Management with Azure Artifacts |
+| `loadtest-pipeline.yml` | Monitor Application Performance with Azure Load Testing (runs the JMeter test from CI/CD) |
 
 ## Other
 | Path | Purpose |
 |---|---|
 | `functional-tests/` | Selenium UI tests (run against the deployed app) |
+| `loadtest/` | JMeter test plan (`calculator.jmx`) + Azure Load Testing config (`loadtest.yaml`) |
 | `package/` | The `kk-calculator` distributable package (Azure Artifacts lab) |
