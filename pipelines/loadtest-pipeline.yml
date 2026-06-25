@@ -44,15 +44,25 @@ steps:
         --load-test-resource "$ALT" --resource-group "$RG" \
         --test-id calculator-ci-test \
         --load-test-config-file loadtest.yaml
+      # create returns at execution-end; don't let a non-zero (e.g. criteria) exit abort the poll.
       az load test-run create \
         --load-test-resource "$ALT" --resource-group "$RG" \
-        --test-id calculator-ci-test --test-run-id "$RUN_ID"
+        --test-id calculator-ci-test --test-run-id "$RUN_ID" || true
 
-      STATUS=$(az load test-run show \
-        --load-test-resource "$ALT" --resource-group "$RG" \
-        --test-run-id "$RUN_ID" --query "testResult" -o tsv)
-      echo "Load test result: $STATUS"
+      # testResult stays NOT_APPLICABLE for a few minutes while Azure aggregates client metrics;
+      # poll until it reaches a terminal state before gating the build.
+      STATUS="NOT_APPLICABLE"
+      for i in $(seq 1 20); do
+        STATUS=$(az load test-run show \
+          --load-test-resource "$ALT" --resource-group "$RG" \
+          --test-run-id "$RUN_ID" --query "testResult" -o tsv 2>/dev/null)
+        echo "Attempt $i: testResult=$STATUS"
+        if [ "$STATUS" = "PASSED" ] || [ "$STATUS" = "FAILED" ]; then break; fi
+        sleep 15
+      done
+
+      echo "Final load test result: $STATUS"
       if [ "$STATUS" != "PASSED" ]; then
-        echo "##vso[task.logissue type=error]Load test breached the failure criteria (result: $STATUS)"
+        echo "##vso[task.logissue type=error]Load test result: $STATUS (criteria not met, or did not finalize in time)"
         exit 1
       fi
