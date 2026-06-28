@@ -15,8 +15,18 @@ stages:
     pool:
       name: kk-devops-agent-pool
     steps:
+    - task: AzureCLI@2
+      displayName: Enable the ACR admin user (so the Web App can pull the image)
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          ACR=$(az acr list --resource-group "$(resourceGroup)" --query "[0].name" -o tsv)
+          echo "Enabling admin user on $ACR"
+          az acr update --name "$ACR" --admin-enabled true
     - task: AzureResourceManagerTemplateDeployment@3
-      displayName: Deploy App Service using Bicep
+      displayName: Deploy Web App for Containers using Bicep
       inputs:
         deploymentScope: 'Resource Group'
         azureResourceManagerConnection: $(azureServiceConnection)
@@ -26,16 +36,4 @@ stages:
         location: '$(location)'
         templateLocation: 'Linked artifact'
         csmFile: 'infra/webapp-docker.bicep'
-        deploymentMode: 'Incremental'
-    - task: AzureResourceManagerTemplateDeployment@3
-      displayName: Add Role Assignment using Bicep
-      inputs:
-        deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: $(azureServiceConnection)
-        subscriptionId: $(subscriptionId)
-        action: 'Create Or Update Resource Group'
-        resourceGroupName: '$(resourceGroup)'
-        location: '$(location)'
-        templateLocation: 'Linked artifact'
-        csmFile: 'infra/webapp-to-acr-roleassignment.bicep'
         deploymentMode: 'Incremental'
