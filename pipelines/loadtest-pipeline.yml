@@ -1,10 +1,7 @@
 # loadtest-pipeline
-# Runs the JMeter load test against the deployed calculator Web App from CI/CD using Azure Load
-# Testing, and fails the build if the run breaches the failure criteria in loadtest/loadtest.yaml.
-#
-# Auth: the AzureCLI task uses the ARM service connection. No extra role grant is needed -- an
-# identity with Contributor/Owner at the subscription level automatically has Load Test Owner
-# data-plane access on load testing resources.
+# Builds the calculator, deploys it to a Linux Web App, and (after you add the LoadTest stage in
+# Exercise 3) runs an Azure Load Testing test against it -- failing the build on the failure
+# criteria in loadtest/loadtest.yaml.
 
 trigger: none
 
@@ -14,55 +11,91 @@ resources:
       trigger: none
 
 variables:
-  - group: lab-vars            # resourceGroup, location, azureServiceConnection (published at startup)
+  - group: lab-vars            # resourceGroup, location, subscriptionId, azureServiceConnection
 
-pool:
-  name: kk-devops-agent-pool
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip python3-venv
+      displayName: Install Python3, pip, venv
+    - script: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pytest tests/test_calc.py
+      displayName: Restore dependencies and run tests
+    - script: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/app
+        cp -r src python_calc.py requirements.txt $(Build.ArtifactStagingDirectory)/app/
+      displayName: Stage application files
+    - task: ArchiveFiles@2
+      displayName: Archive application as Web.zip
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/app'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        replaceExistingArchive: true
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Website artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/Web.zip'
+        artifact: Website
+        publishLocation: pipeline
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Bicep artifact
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/infra/webapp.bicep'
+        artifact: Bicep
+        publishLocation: pipeline
 
-steps:
-- task: AzureCLI@2
-  displayName: Run the load test with Azure Load Testing
-  inputs:
-    azureSubscription: $(azureServiceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-      set -e
-      az extension add --name load --only-show-errors
+- stage: Deploy
+  displayName: Deploy Web App
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    pool:
+      name: kk-devops-agent-pool
+      clean: true
+    steps:
+    - download: current
+      artifact: Website
+    - download: current
+      artifact: Bicep
+    - task: AzureCLI@2
+      name: provision
+      displayName: Provision Web App (Bicep)
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          WEBAPP=$(az deployment group create \
+            --resource-group "$(resourceGroup)" \
+            --template-file "$(Pipeline.Workspace)/Bicep/webapp.bicep" \
+            --parameters location="$(location)" \
+            --query properties.outputs.webAppName.value -o tsv)
+          echo "Deployed web app: $WEBAPP"
+          echo "##vso[task.setvariable variable=webAppName;isOutput=true]$WEBAPP"
+    - task: AzureWebApp@1
+      displayName: Deploy app to Web App
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        appType: webAppLinux
+        appName: '$(provision.webAppName)'
+        package: '$(Pipeline.Workspace)/Website/Web.zip'
+        startUpCommand: 'gunicorn --bind=0.0.0.0:8000 python_calc:app'
 
-      RG="$(resourceGroup)"
-      ALT=$(az load list --resource-group "$RG" --query "[0].name" -o tsv)
-      WEBAPP=$(az webapp list --resource-group "$RG" --query "[0].name" -o tsv)
-      HOST=$(az webapp show --resource-group "$RG" --name "$WEBAPP" --query defaultHostName -o tsv)
-      echo "Load Testing resource: $ALT | target host: $HOST"
-
-      cd loadtest
-      sed -i "s/REPLACE_WITH_WEBAPP_HOST/$HOST/" loadtest.yaml
-
-      RUN_ID="ci-run-$(Build.BuildId)"
-      az load test create \
-        --load-test-resource "$ALT" --resource-group "$RG" \
-        --test-id calculator-ci-test \
-        --load-test-config-file loadtest.yaml
-      # create returns at execution-end; don't let a non-zero (e.g. criteria) exit abort the poll.
-      az load test-run create \
-        --load-test-resource "$ALT" --resource-group "$RG" \
-        --test-id calculator-ci-test --test-run-id "$RUN_ID" || true
-
-      # testResult stays NOT_APPLICABLE for a few minutes while Azure aggregates client metrics;
-      # poll until it reaches a terminal state before gating the build.
-      STATUS="NOT_APPLICABLE"
-      for i in $(seq 1 20); do
-        STATUS=$(az load test-run show \
-          --load-test-resource "$ALT" --resource-group "$RG" \
-          --test-run-id "$RUN_ID" --query "testResult" -o tsv 2>/dev/null)
-        echo "Attempt $i: testResult=$STATUS"
-        if [ "$STATUS" = "PASSED" ] || [ "$STATUS" = "FAILED" ]; then break; fi
-        sleep 15
-      done
-
-      echo "Final load test result: $STATUS"
-      if [ "$STATUS" != "PASSED" ]; then
-        echo "##vso[task.logissue type=error]Load test result: $STATUS (criteria not met, or did not finalize in time)"
-        exit 1
-      fi
+# ─────────────────────────────────────────────────────────────────────────────
+# Exercise 3: add the LoadTest stage below (it runs the JMeter test against the
+# deployed app via `az load` and fails the build on the loadtest.yaml criteria).
+# ─────────────────────────────────────────────────────────────────────────────
