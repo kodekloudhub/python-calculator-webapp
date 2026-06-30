@@ -6,7 +6,7 @@
 // pipeline.
 
 @description('Resource location. Defaults to the resource group location.')
-param location string = resourceGroup().location
+param location string = 'westus'
 
 @description('Suffix used to build unique resource names.')
 param suffix string = uniqueString(resourceGroup().id)

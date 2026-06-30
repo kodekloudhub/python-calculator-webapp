@@ -7,7 +7,7 @@ param webAppName string = 'gha-pycalc-${uniqueString(resourceGroup().id)}'
 param sku string = 'B1'
 
 @description('Resource location. Defaults to the resource group location.')
-param location string = resourceGroup().location
+param location string = 'westus'
 
 @description('Linux runtime stack for the web app.')
 param linuxFxVersion string = 'PYTHON|3.12'

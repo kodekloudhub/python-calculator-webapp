@@ -50,7 +50,7 @@ stages:
           WEBAPP=$(az deployment group create \
             --resource-group "$(resourceGroup)" \
             --template-file "$(Build.SourcesDirectory)/infra/webapp-appconfig.bicep" \
-            --parameters location="$(location)" \
+            --parameters location="westus" \
             --query properties.outputs.webAppName.value -o tsv)
           echo "Deployed web app: $WEBAPP"
           echo "##vso[task.setvariable variable=webAppName;isOutput=true]$WEBAPP"

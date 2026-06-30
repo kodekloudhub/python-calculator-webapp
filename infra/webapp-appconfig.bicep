@@ -10,7 +10,7 @@ param webAppName string = 'ff-pycalc-${uniqueString(resourceGroup().id)}'
 param sku string = 'B1'
 
 @description('Resource location.')
-param location string = resourceGroup().location
+param location string = 'westus'
 
 var appServicePlanName = toLower('asp-${webAppName}')
 

@@ -2,7 +2,7 @@
 param suffix string = uniqueString(resourceGroup().id)
 
 @description('Use the Resource Group Location')
-param location string = resourceGroup().location
+param location string = 'westus'
 
 // Reference the existing Azure Container Registry. Its admin user is enabled by the CD pipeline
 // before this template is deployed, so listCredentials() returns the registry username/password.
