@@ -18,8 +18,11 @@ resources:
     - repository: self
       trigger: none
 
+variables:
+  - group: lab-vars
+
 pool:
-  name: kk-devops-agent-pool
+  name: $(agentPool)
 
 steps:
 - script: |

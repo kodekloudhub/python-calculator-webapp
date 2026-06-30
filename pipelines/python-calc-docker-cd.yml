@@ -13,7 +13,7 @@ stages:
   jobs:
   - job: Deploy
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
     steps:
     - task: AzureCLI@2
       displayName: Enable the ACR admin user (so the Web App can pull the image)

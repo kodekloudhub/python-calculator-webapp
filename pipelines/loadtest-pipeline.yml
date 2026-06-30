@@ -19,7 +19,7 @@ stages:
   jobs:
   - job: Build
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
       clean: true
     steps:
     - script: |
@@ -64,7 +64,7 @@ stages:
   jobs:
   - job: Deploy
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
       clean: true
     steps:
     - download: current

@@ -16,11 +16,13 @@ resources:
       trigger: none
 
 variables:
+  - group: lab-vars
   # Name of the project-scoped feed created in Exercise 1.
-  feedName: 'kk-python-feed'
+  - name: feedName
+    value: 'kk-python-feed'
 
 pool:
-  name: kk-devops-agent-pool
+  name: $(agentPool)
 
 steps:
 - script: |

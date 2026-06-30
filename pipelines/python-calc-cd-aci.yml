@@ -17,7 +17,7 @@ stages:
   jobs:
   - job: Deploy
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
     steps:
     - task: AzureCLI@2
       displayName: Deploy to ACI using the Key Vault acr-secret

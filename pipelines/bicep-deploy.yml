@@ -24,7 +24,7 @@ stages:
   jobs:
   - job: Validate
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
     steps:
     - task: AzureCLI@2
       displayName: Bicep lint (build) and what-if
@@ -45,7 +45,7 @@ stages:
   jobs:
   - job: Deploy
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
     steps:
     - task: AzureCLI@2
       displayName: Deploy Bicep templates

@@ -23,7 +23,7 @@ stages:
   jobs:
     - job: BuildAndPush
       pool:
-        name: kk-devops-agent-pool
+        name: $(agentPool)
       steps:
       - task: AzureCLI@2
         displayName: Provision ACR and build/push image (az acr build)

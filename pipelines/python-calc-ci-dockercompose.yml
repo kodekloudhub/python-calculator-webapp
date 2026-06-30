@@ -18,7 +18,7 @@ stages:
   jobs:
   - job: Build
     pool:
-      name: kk-devops-agent-pool
+      name: $(agentPool)
     steps:
     - task: AzureResourceManagerTemplateDeployment@3
       displayName: Deploy ACR (Bicep)
